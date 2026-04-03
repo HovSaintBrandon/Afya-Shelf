@@ -36,9 +36,20 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
       ]);
 
       setState(() {
-        _batches = (results[0]['batches'] as List)
-            .where((b) => b['medicineId'] == widget.medicine['_id'])
-            .toList();
+        _batches = (results[0]['batches'] as List).where((b) {
+          final medId = b['medicine'] is Map
+              ? b['medicine']['_id']
+              : (b['medicine'] ?? b['medicineId']);
+          return medId == widget.medicine['_id'];
+        }).toList();
+
+        // Calculate total stock locally from batches
+        int calculatedTotal = 0;
+        for (var b in _batches) {
+          calculatedTotal += ((b['currentQuantity'] ?? b['quantity'] ?? 0) as num).toInt();
+        }
+        widget.medicine['totalStock'] = calculatedTotal;
+        
         _transactions = (results[1] as List)
             .where((t) => t['medicineId'] == widget.medicine['_id'])
             .toList();
