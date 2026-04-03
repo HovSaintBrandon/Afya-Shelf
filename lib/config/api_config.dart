@@ -19,6 +19,7 @@ class ApiConfig {
   static const String medicines = '$baseUrl/medicines';
   static String medicine(String id) => '$baseUrl/medicines/$id';
   static const String medicineOCR = '$baseUrl/medicines/ocr';
+  static const String medicinesIngest = '$baseUrl/medicines/ingest';
 
   // Batches
   static const String batches = '$baseUrl/batches';

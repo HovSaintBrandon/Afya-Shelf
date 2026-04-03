@@ -2,53 +2,195 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../models/ocr_response.dart';
+import '../services/api_service.dart';
+import '../config/api_config.dart';
 
-class OcrResultsScreen extends StatelessWidget {
+class OcrResultsScreen extends StatefulWidget {
   final OcrResponse response;
 
   const OcrResultsScreen({super.key, required this.response});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Extraction Results'),
+  State<OcrResultsScreen> createState() => _OcrResultsScreenState();
+}
+
+class _OcrResultsScreenState extends State<OcrResultsScreen> {
+  final _api = ApiService();
+  bool _isImporting = false;
+  List<Map<String, dynamic>> _extractedData = [];
+  final List<TextSection> _sections = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeData();
+  }
+
+  void _initializeData() {
+    final sections = _splitIntoSections(widget.response.extractedText);
+    _sections.addAll(sections);
+    
+    for (var section in sections) {
+      final isCsv = section.lines.isNotEmpty && section.lines.first.contains(',');
+      if (isCsv) {
+        final List<List<String>> data = section.lines.map((l) => _parseCsvLine(l)).toList();
+        if (data.length > 1) {
+          final headers = data.first;
+          final rows = data.skip(1).toList();
+
+          for (var row in rows) {
+            final Map<String, dynamic> item = {};
+            for (int i = 0; i < headers.length && i < row.length; i++) {
+              final header = headers[i].toLowerCase();
+              final value = row[i];
+
+              if (header.contains('name')) {
+                item['name'] = value;
+              } else if (header.contains('category')) {
+                item['category'] = value;
+              } else if (header.contains('expiry')) {
+                item['expiryDate'] = value;
+              } else if (header.contains('quantity')) {
+                item['quantity'] = int.tryParse(value.replaceAll(',', '')) ?? 0;
+              } else if (header.contains('amount') || header.contains('price')) {
+                // Sanitize price: remove KES, commas, etc.
+                final cleanPrice = value.replaceAll(RegExp(r'[^0-9.]'), '');
+                item['unitPrice'] = double.tryParse(cleanPrice) ?? 0.0;
+              }
+            }
+            if (item.containsKey('name')) {
+              _extractedData.add(item);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _importData() async {
+    if (_extractedData.isEmpty) return;
+
+    setState(() => _isImporting = true);
+
+    try {
+      await _api.post(ApiConfig.medicinesIngest, {
+        'items': _extractedData,
+      });
+
+      if (mounted) {
+        setState(() => _isImporting = false);
+        _showSuccessDialog();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isImporting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import failed: $e'),
+            backgroundColor: AfyaTheme.destructive,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle, color: AfyaTheme.success),
+            const SizedBox(width: 10),
+            Text('Success', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Text(
+          'Successfully imported ${_extractedData.length} items into your inventory.',
+          style: GoogleFonts.inter(),
+        ),
         actions: [
-          if (response.success)
-            TextButton.icon(
-              onPressed: () {
-                // Future: implementation for importing
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Import feature coming soon!')),
-                );
-              },
-              icon: const Icon(Icons.download, color: AfyaTheme.primary),
-              label: const Text('Import', style: TextStyle(color: AfyaTheme.primary)),
-            ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Close dialog
+              Navigator.pop(context); // Back to Medicines screen
+            },
+            child: const Text('OK'),
+          ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            if (response.results.isNotEmpty) _buildFileSummary(),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                'Extracted Content',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AfyaTheme.textPrimary,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: const Text('Extraction Results'),
+            actions: [
+              if (widget.response.success && _extractedData.isNotEmpty)
+                TextButton.icon(
+                  onPressed: _isImporting ? null : _importData,
+                  icon: const Icon(Icons.cloud_upload_outlined, color: AfyaTheme.primary),
+                  label: const Text('Sync All', style: TextStyle(color: AfyaTheme.primary, fontWeight: FontWeight.bold)),
+                ),
+            ],
+          ),
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                if (widget.response.results.isNotEmpty) _buildFileSummary(),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Extracted Data',
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AfyaTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        '${_extractedData.length} items found',
+                        style: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildDataTable(),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+        ),
+        if (_isImporting)
+          Container(
+            color: Colors.black.withOpacity(0.3),
+            child: const Center(
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Syncing data to inventory...'),
+                    ],
+                  ),
                 ),
               ),
             ),
-            _buildExtractedContent(context),
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
   }
 
@@ -57,23 +199,23 @@ class OcrResultsScreen extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: response.success ? AfyaTheme.successBg : AfyaTheme.destructiveBg,
+        color: widget.response.success ? AfyaTheme.successBg : AfyaTheme.destructiveBg,
       ),
       child: Column(
         children: [
           Icon(
-            response.success ? Icons.check_circle : Icons.error,
+            widget.response.success ? Icons.check_circle : Icons.error,
             size: 48,
-            color: response.success ? AfyaTheme.success : AfyaTheme.destructive,
+            color: widget.response.success ? AfyaTheme.success : AfyaTheme.destructive,
           ),
           const SizedBox(height: 12),
           Text(
-            response.message,
+            widget.response.message,
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: response.success ? AfyaTheme.success : AfyaTheme.destructive,
+              color: widget.response.success ? AfyaTheme.success : AfyaTheme.destructive,
             ),
           ),
         ],
@@ -88,7 +230,7 @@ class OcrResultsScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Files Processed (${response.totalFiles})',
+            'Files Processed (${widget.response.totalFiles})',
             style: GoogleFonts.inter(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -97,7 +239,7 @@ class OcrResultsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          ...response.results.map((res) => Container(
+          ...widget.response.results.map((res) => Container(
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -138,17 +280,99 @@ class OcrResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildExtractedContent(BuildContext context) {
-    final sections = _splitIntoSections(response.extractedText);
-    
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: sections.length,
-      itemBuilder: (context, index) {
-        final section = sections[index];
-        return _buildSectionWidget(section);
-      },
+  Widget _buildDataTable() {
+    if (_extractedData.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40.0),
+          child: Text('No tabular data extracted.', style: GoogleFonts.inter(color: AfyaTheme.textSecondary)),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AfyaTheme.border.withOpacity(0.5)),
+          ),
+          child: DataTable(
+            headingRowColor: MaterialStateProperty.all(AfyaTheme.surfaceMuted),
+            headingTextStyle: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AfyaTheme.textPrimary,
+            ),
+            dataTextStyle: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary),
+            columnSpacing: 20,
+            columns: const [
+              DataColumn(label: Text('Medicine Name')),
+              DataColumn(label: Text('Category')),
+              DataColumn(label: Text('Expiry')),
+              DataColumn(label: Text('Qty')),
+              DataColumn(label: Text('Unit Price')),
+            ],
+            rows: _extractedData.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final item = entry.value;
+              return DataRow(
+                cells: [
+                  DataCell(Text(item['name'] ?? '')),
+                  DataCell(Text(item['category'] ?? '')),
+                  DataCell(Text(item['expiryDate'] ?? '')),
+                  DataCell(Text(item['quantity'].toString())),
+                  DataCell(
+                    Row(
+                      children: [
+                        Text(item['unitPrice'].toStringAsFixed(2)),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 16, color: AfyaTheme.primary),
+                          onPressed: () => _editPrice(idx),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _editPrice(int index) {
+    final controller = TextEditingController(text: _extractedData[index]['unitPrice'].toString());
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit Unit Price', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'New Price (KES)',
+            suffixText: '.00',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _extractedData[index]['unitPrice'] = double.tryParse(controller.text) ?? 0.0;
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -187,94 +411,7 @@ class OcrResultsScreen extends StatelessWidget {
     return sections;
   }
 
-  Widget _buildSectionWidget(TextSection section) {
-    final isCsv = section.lines.isNotEmpty && section.lines.first.contains(',');
-    
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AfyaTheme.border.withOpacity(0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (section.filename.isNotEmpty || section.sheetName.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Icon(
-                    section.sheetName.isNotEmpty ? Icons.table_chart : Icons.description,
-                    size: 16,
-                    color: AfyaTheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${section.filename}${section.sheetName.isNotEmpty ? ' • ${section.sheetName}' : ''}',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AfyaTheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const Divider(height: 1),
-          if (isCsv)
-            _buildCsvTable(section.lines)
-          else
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                section.lines.join('\n'),
-                style: GoogleFonts.robotoMono(fontSize: 12, color: AfyaTheme.textPrimary),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCsvTable(List<String> lines) {
-    if (lines.isEmpty) return const SizedBox.shrink();
-
-    final List<List<String>> data = lines.map((l) => _parseCsvLine(l)).toList();
-    final List<String> headers = data.first;
-    final List<List<String>> rows = data.skip(1).toList();
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        headingRowColor: MaterialStateProperty.all(AfyaTheme.surfaceMuted),
-        headingTextStyle: GoogleFonts.inter(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: AfyaTheme.textPrimary,
-        ),
-        dataTextStyle: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary),
-        columnSpacing: 24,
-        columns: headers.map((h) => DataColumn(label: Text(h))).toList(),
-        rows: rows.map((row) {
-          return DataRow(
-            cells: row.map((cell) => DataCell(Text(cell))).toList(),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
   List<String> _parseCsvLine(String line) {
-    // Simple CSV parser that handles quotes
     final List<String> result = [];
     bool inQuotes = false;
     StringBuffer current = StringBuffer();
