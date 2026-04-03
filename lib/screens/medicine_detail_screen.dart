@@ -150,6 +150,7 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
   }
 
   Widget _batchTile(Map<String, dynamic> b) {
+    final qty = b['currentQuantity'] ?? b['quantity'] ?? 0;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -169,7 +170,7 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
             ],
           ),
           const Spacer(),
-          Text('${b['quantity']}', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AfyaTheme.primary)),
+          Text('$qty', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AfyaTheme.primary)),
         ],
       ),
     );

@@ -18,18 +18,15 @@ class Batch {
   });
 
   factory Batch.fromJson(Map<String, dynamic> json) {
+    dynamic med = json['medicine'] ?? json['medicineId'];
     return Batch(
       id: json['_id'] ?? json['id'] ?? '',
-      medicineId: json['medicineId'] is Map
-          ? json['medicineId']['_id'] ?? ''
-          : json['medicineId'] ?? '',
+      medicineId: med is Map ? (med['_id'] ?? '') : (med ?? ''),
       batchNumber: json['batchNumber'] ?? '',
-      expiryDate: DateTime.parse(json['expiryDate']),
-      quantity: json['quantity'] ?? 0,
+      expiryDate: DateTime.tryParse(json['expiryDate'] ?? '') ?? DateTime.now(),
+      quantity: json['currentQuantity'] ?? json['quantity'] ?? 0,
       notes: json['notes'],
-      medicineName: json['medicineId'] is Map
-          ? json['medicineId']['name']
-          : null,
+      medicineName: med is Map ? med['name'] : null,
     );
   }
 
