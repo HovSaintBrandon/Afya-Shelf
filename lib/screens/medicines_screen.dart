@@ -87,10 +87,12 @@ class _MedicinesScreenState extends State<MedicinesScreen> {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx', 'docx', 'pdf'],
+      withData: true,
     );
     
-    if (result != null && result.files.single.path != null && mounted) {
-      final filePath = result.files.single.path!;
+    if (result != null && result.files.single.bytes != null && mounted) {
+      final fileBytes = result.files.single.bytes!;
+      final fileName = result.files.single.name;
       
       // Show loading dialog
       showDialog(
@@ -114,7 +116,7 @@ class _MedicinesScreenState extends State<MedicinesScreen> {
       );
 
       try {
-        final ocrResult = await _sync.ocrExtraction(filePath);
+        final ocrResult = await _sync.ocrExtraction(fileBytes, fileName);
         if (mounted) {
           Navigator.pop(context); // Close loading dialog
           Navigator.push(

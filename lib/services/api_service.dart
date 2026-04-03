@@ -91,16 +91,16 @@ class ApiService {
     }
   }
 
-  Future<dynamic> postMultipart(String url, String filePath, String field) async {
-    print('🚀 [API REQ] MULTIPART: $url | FILE: $filePath');
+  Future<dynamic> postMultipart(String url, List<int> bytes, String filename, String field) async {
+    print('🚀 [API REQ] MULTIPART: $url | FILE: $filename');
     try {
       final request = http.MultipartRequest('POST', Uri.parse(url));
       request.headers.addAll(await _headers);
-      request.files.add(await http.MultipartFile.fromPath(field, filePath));
+      request.files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
       
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      return await _handleResponse(response, () => postMultipart(url, filePath, field));
+      return await _handleResponse(response, () => postMultipart(url, bytes, filename, field));
     } catch (e) {
       print('❌ [API ERR] MULTIPART $url: $e');
       if (e is ApiException) rethrow;

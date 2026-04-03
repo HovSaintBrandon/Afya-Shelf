@@ -70,10 +70,10 @@ class SyncService {
     }
   }
 
-  Future<OcrResponse> ocrExtraction(String filePath) async {
-    print('📸 [OCR] Extracting data from: $filePath');
+  Future<OcrResponse> ocrExtraction(List<int> bytes, String filename) async {
+    print('📸 [OCR] Extracting data from: $filename');
     try {
-      final result = await _api.postMultipart(ApiConfig.medicineOCR, filePath, 'files'); // Updated 'document' to 'files' as per conversation history 8eb6b996
+      final result = await _api.postMultipart(ApiConfig.medicineOCR, bytes, filename, 'files'); // Updated 'document' to 'files' as per conversation history 8eb6b996
       print('✅ [OCR] Extraction successful: $result');
       return OcrResponse.fromJson(result);
     } catch (e) {
