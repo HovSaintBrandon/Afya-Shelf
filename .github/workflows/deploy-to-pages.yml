@@ -15,22 +15,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # Remove "latest" → let it pick the newest stable automatically
-          # Or pin a recent stable version if you want consistency:
-          # flutter-version: '3.29.0'   # ← uncomment if you prefer pinning
 
-      - name: Get dependencies
+      - name: Install dependencies
         run: flutter pub get
 
-      - name: Build Web (Release)
-        run: flutter build web --release --web-renderer html --base-href "/Afya-Shelf/"
+      - name: Build Web Release
+        run: flutter build web --release --base-href "/Afya-Shelf/"
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
