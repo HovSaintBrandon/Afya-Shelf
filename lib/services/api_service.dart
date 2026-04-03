@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
+import 'package:http_parser/http_parser.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -92,19 +93,54 @@ class ApiService {
   }
 
   Future<dynamic> postMultipart(String url, List<int> bytes, String filename, String field) async {
-    print('🚀 [API REQ] MULTIPART: $url | FILE: $filename');
+    print('🚀 [API REQ] MULTIPART: $url | FILE: $filename | BYTES: ${bytes.length}');
     try {
       final request = http.MultipartRequest('POST', Uri.parse(url));
-      request.headers.addAll(await _headers);
-      request.files.add(http.MultipartFile.fromBytes(field, bytes, filename: filename));
       
-      final streamedResponse = await request.send();
+      // Remove Content-Type to let the boundary be generated
+      final headers = await _headers;
+      headers.remove('Content-Type');
+      request.headers.addAll(headers);
+
+      final extension = filename.split('.').last.toLowerCase();
+      final mimeType = _getMimeType(extension);
+      
+      print('📤 [API REQ] Requesting with MIME: $mimeType');
+      
+      // Using constructor directly with ByteStream to ensure no hidden platform checks
+      final multipartFile = http.MultipartFile(
+        field, 
+        http.ByteStream.fromBytes(bytes), 
+        bytes.length, 
+        filename: filename,
+        contentType: MediaType.parse(mimeType),
+      );
+      
+      request.files.add(multipartFile);
+      
+      print('⏳ [API REQ] Sending multipart request...');
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      print('📶 [API REQ] Response status: ${streamedResponse.statusCode}');
+      
       final response = await http.Response.fromStream(streamedResponse);
       return await _handleResponse(response, () => postMultipart(url, bytes, filename, field));
-    } catch (e) {
-      print('❌ [API ERR] MULTIPART $url: $e');
+    } catch (e, stack) {
+      print('❌ [API ERR] MULTIPART $url FAIL: $e');
+      print('📋 [API ERR] Stacktrace: $stack');
       if (e is ApiException) rethrow;
       throw ApiException(statusCode: 0, message: e.toString());
+    }
+  }
+
+  String _getMimeType(String ext) {
+    switch (ext) {
+      case 'pdf': return 'application/pdf';
+      case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'jpg':
+      case 'jpeg': return 'image/jpeg';
+      case 'png': return 'image/png';
+      default: return 'application/octet-stream';
     }
   }
 
