@@ -2,6 +2,7 @@ import '../config/api_config.dart';
 import 'api_service.dart';
 import '../models/medicine.dart';
 import '../models/batch.dart';
+import '../models/ocr_response.dart';
 
 class SyncService {
   final ApiService _api = ApiService();
@@ -69,12 +70,12 @@ class SyncService {
     }
   }
 
-  Future<dynamic> ocrExtraction(String filePath) async {
+  Future<OcrResponse> ocrExtraction(String filePath) async {
     print('📸 [OCR] Extracting data from: $filePath');
     try {
-      final result = await _api.postMultipart(ApiConfig.medicineOCR, filePath, 'document');
+      final result = await _api.postMultipart(ApiConfig.medicineOCR, filePath, 'files'); // Updated 'document' to 'files' as per conversation history 8eb6b996
       print('✅ [OCR] Extraction successful: $result');
-      return result;
+      return OcrResponse.fromJson(result);
     } catch (e) {
       print('❌ [OCR] Extraction failed: $e');
       rethrow;

@@ -5,8 +5,10 @@ import '../models/medicine.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
 import 'medicine_detail_screen.dart';
+import 'ocr_results_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import '../services/sync_service.dart';
 
 class MedicinesScreen extends StatefulWidget {
   const MedicinesScreen({super.key});
@@ -17,6 +19,7 @@ class MedicinesScreen extends StatefulWidget {
 
 class _MedicinesScreenState extends State<MedicinesScreen> {
   final _api = ApiService();
+  final _sync = SyncService();
   List<Medicine> _medicines = [];
   bool _loading = true;
   final _searchCtrl = TextEditingController();
@@ -85,8 +88,48 @@ class _MedicinesScreenState extends State<MedicinesScreen> {
       type: FileType.custom,
       allowedExtensions: ['xlsx', 'docx', 'pdf'],
     );
-    if (result != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Uploading bulk file: ${result.files.single.name}...')));
+    
+    if (result != null && result.files.single.path != null && mounted) {
+      final filePath = result.files.single.path!;
+      
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => Center(
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text('Processing file...', style: GoogleFonts.inter()),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      try {
+        final ocrResult = await _sync.ocrExtraction(filePath);
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => OcrResultsScreen(response: ocrResult)),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AfyaTheme.destructive),
+          );
+        }
+      }
     }
   }
 
