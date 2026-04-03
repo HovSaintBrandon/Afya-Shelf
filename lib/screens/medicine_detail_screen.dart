@@ -201,8 +201,16 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
               ],
             ),
           ),
-          Text('${isPositive ? "+" : "-"}${t['quantity']}', 
-            style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: isPositive ? AfyaTheme.success : AfyaTheme.destructive),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('${isPositive ? "+" : "-"}${t['quantity']}', 
+                style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: isPositive ? AfyaTheme.success : AfyaTheme.destructive),
+              ),
+              Text('KES ${((t['amount'] ?? 0) as num).toStringAsFixed(2)}', 
+                style: GoogleFonts.inter(fontSize: 10, color: AfyaTheme.textSecondary),
+              ),
+            ],
           ),
         ],
       ),

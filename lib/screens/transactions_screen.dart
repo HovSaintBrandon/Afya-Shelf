@@ -90,6 +90,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final medIdCtrl = TextEditingController();
     final batchNumCtrl = TextEditingController();
     final qtyCtrl = TextEditingController();
+    final amtCtrl = TextEditingController();
     final reasonCtrl = TextEditingController();
     String type = 'DISPENSE';
 
@@ -119,6 +120,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   const SizedBox(height: 12),
                   TextField(controller: qtyCtrl, decoration: const InputDecoration(labelText: 'Quantity'), keyboardType: TextInputType.number),
                   const SizedBox(height: 12),
+                  TextField(controller: amtCtrl, decoration: const InputDecoration(labelText: 'Amount'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+                  const SizedBox(height: 12),
                   TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Reason (Optional)')),
                 ],
               ),
@@ -134,6 +137,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     'batchNumber': batchNumCtrl.text,
                     'type': type,
                     'quantity': int.tryParse(qtyCtrl.text) ?? 1,
+                    'amount': double.tryParse(amtCtrl.text) ?? 0.0,
                     'reason': reasonCtrl.text,
                   });
                   if (ctx.mounted) Navigator.pop(ctx);
@@ -194,6 +198,8 @@ class _TransactionCard extends StatelessWidget {
           Row(
             children: [
               _infoItem('Quantity', '${transaction.quantity > 0 ? '+' : ''}${transaction.quantity}'),
+              const Spacer(),
+              _infoItem('Amount', 'KES ${transaction.amount.toStringAsFixed(2)}'),
               const Spacer(),
               _infoItem('Performed by', transaction.user),
             ],

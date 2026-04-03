@@ -10,6 +10,7 @@ class Transaction {
   final String reason;
   final DateTime createdAt;
   final String user;
+  final double amount;
 
   Transaction({
     required this.id,
@@ -21,6 +22,7 @@ class Transaction {
     required this.reason,
     required this.createdAt,
     required this.user,
+    required this.amount,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -38,8 +40,11 @@ class Transaction {
           : json['batchId'] ?? '',
       quantity: json['quantity'] ?? 0,
       reason: json['reason'] ?? '',
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
       user: json['user'] ?? json['userId'] ?? '',
+      amount: (json['amount'] ?? 0).toDouble(),
     );
   }
 
@@ -49,6 +54,7 @@ class Transaction {
     'batchId': batchId,
     'quantity': quantity,
     'reason': reason,
+    'amount': amount,
   };
 
   String get formattedDate => DateFormat('MMM dd, yyyy HH:mm').format(createdAt);
