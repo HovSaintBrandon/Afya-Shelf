@@ -12,6 +12,12 @@ class Transaction {
   final String user;
   final double amount;
 
+  final String? paymentStatus;
+  final String? status;
+  final String? paymentMode;
+  final String? shareLink;
+  final String? patientPhone;
+
   Transaction({
     required this.id,
     required this.type,
@@ -23,6 +29,11 @@ class Transaction {
     required this.createdAt,
     required this.user,
     required this.amount,
+    this.paymentStatus,
+    this.status,
+    this.paymentMode,
+    this.shareLink,
+    this.patientPhone,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -45,6 +56,11 @@ class Transaction {
           : DateTime.now(),
       user: json['user'] ?? json['userId'] ?? '',
       amount: (json['amount'] ?? 0).toDouble(),
+      paymentStatus: json['paymentStatus'],
+      status: json['status'],
+      paymentMode: json['paymentMode'],
+      shareLink: json['shareLink'],
+      patientPhone: json['patientPhone'],
     );
   }
 

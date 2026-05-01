@@ -27,6 +27,7 @@ class ApiConfig {
 
   // Transactions
   static const String transactions = '$baseUrl/transactions';
+  static const String dispense = '$baseUrl/dispense';
 
   // Reports
   static const String reportExpiry = '$baseUrl/reports/expiry';

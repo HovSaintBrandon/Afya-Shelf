@@ -4,6 +4,7 @@ import '../config/theme.dart';
 import '../models/transaction.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
+import 'dart:developer' as developer;
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key});
@@ -26,13 +27,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Future<void> _loadTransactions() async {
     setState(() => _loading = true);
     try {
-      final data = await _api.get(ApiConfig.transactions);
+      developer.log('Fetching transactions from: ${ApiConfig.dispense}', name: 'TransactionsScreen');
+      final data = await _api.get(ApiConfig.dispense);
+      developer.log('Fetched transactions successfully. Count: ${(data is List ? data : (data['data'] ?? [])).length}', name: 'TransactionsScreen');
       final list = data is List ? data : (data['data'] ?? []);
       setState(() {
         _transactions = list.map<Transaction>((e) => Transaction.fromJson(e)).toList();
         _loading = false;
       });
     } catch (e) {
+      developer.log('Error fetching transactions: $e', name: 'TransactionsScreen', error: e);
       setState(() => _loading = false);
     }
   }
@@ -190,8 +194,32 @@ class _TransactionCard extends StatelessWidget {
                 ),
               ),
               _typeBadge(transaction.type),
+              if (transaction.paymentStatus != null) ...[
+                const SizedBox(width: 8),
+                _statusBadge(transaction.paymentStatus!, isPayment: true),
+              ],
+              if (transaction.status != null) ...[
+                const SizedBox(width: 8),
+                _statusBadge(transaction.status!, isPayment: false),
+              ],
             ],
           ),
+          if (transaction.paymentMode != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(transaction.paymentMode == 'DIRECT' ? Icons.flash_on : Icons.security, size: 14, color: AfyaTheme.textSecondary),
+                const SizedBox(width: 4),
+                Text('Mode: ${transaction.paymentMode}', style: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary, fontWeight: FontWeight.w600)),
+                if (transaction.patientPhone != null) ...[
+                  const SizedBox(width: 12),
+                  const Icon(Icons.phone, size: 14, color: AfyaTheme.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(transaction.patientPhone!, style: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary, fontWeight: FontWeight.w600)),
+                ],
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 12),
@@ -260,6 +288,43 @@ class _TransactionCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
       child: Text(type, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: fg)),
+    );
+  }
+
+  Widget _statusBadge(String status, {bool isPayment = false}) {
+    Color bg = AfyaTheme.surfaceMuted;
+    Color fg = AfyaTheme.textSecondary;
+
+    if (isPayment) {
+      String label = status;
+      switch (status) {
+        case 'COMPLETED': bg = AfyaTheme.successBg; fg = AfyaTheme.success; break;
+        case 'PENDING': bg = AfyaTheme.warningBg; fg = AfyaTheme.warning; break;
+        case 'HELD': 
+          bg = AfyaTheme.infoBg; 
+          fg = AfyaTheme.info; 
+          label = 'Funds Secured';
+          break;
+        case 'FAILED': bg = AfyaTheme.destructiveBg; fg = AfyaTheme.destructive; break;
+      }
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
+        child: Text(label, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: fg)),
+      );
+    } else {
+      switch (status) {
+        case 'DELIVERED': bg = AfyaTheme.successBg; fg = AfyaTheme.success; break;
+        case 'DISPENSED': bg = AfyaTheme.infoBg; fg = AfyaTheme.info; break;
+        case 'CANCELLED': bg = AfyaTheme.destructiveBg; fg = AfyaTheme.destructive; break;
+        case 'INITIATED': bg = AfyaTheme.surfaceMuted; fg = AfyaTheme.textSecondary; break;
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
+      child: Text(status, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: fg)),
     );
   }
 }

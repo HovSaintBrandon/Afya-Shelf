@@ -4,6 +4,8 @@ import '../config/theme.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
 import '../models/medicine.dart';
+import 'package:flutter/services.dart';
+import 'dart:developer' as developer;
 
 class DispenseDialog extends StatefulWidget {
   const DispenseDialog({super.key});
@@ -25,12 +27,18 @@ class _DispenseDialogState extends State<DispenseDialog> {
   final _api = ApiService();
   final _searchCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController(text: '1');
+  final _phoneCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  final _reasonCtrl = TextEditingController();
   
   List<Medicine> _results = [];
   Medicine? _selectedMedicine;
   Map<String, dynamic>? _selectedBatch;
+  String _paymentMode = 'DIRECT';
   bool _loading = false;
   bool _processing = false;
+  String? _shareLink;
+  String? _dispenseId;
 
   @override
   void initState() {
@@ -46,6 +54,7 @@ class _DispenseDialogState extends State<DispenseDialog> {
     
     // Simple search logic
     try {
+      developer.log('Searching medicines with query: ${_searchCtrl.text}', name: 'DispenseDialog');
       final data = await _api.get('${ApiConfig.medicines}?search=${_searchCtrl.text}');
       final list = data is List ? data : (data['data'] ?? []);
       if (mounted) {
@@ -64,6 +73,7 @@ class _DispenseDialogState extends State<DispenseDialog> {
     });
 
     try {
+      developer.log('Fetching batches for medicine ID: ${m.id}', name: 'DispenseDialog');
       final batchesData = await _api.get('${ApiConfig.batches}?medicineId=${m.id}');
       final batches = batchesData['batches'] as List;
       
@@ -73,7 +83,10 @@ class _DispenseDialogState extends State<DispenseDialog> {
         batches.sort((a, b) => (a['expiryDate'] as String).compareTo(b['expiryDate'] as String));
         
         final optimalBatch = batches.firstWhere(
-          (b) => DateTime.parse(b['expiryDate']).isAfter(now) && (b['quantity'] ?? 0) > 0,
+          (b) {
+            final q = b['currentQuantity'] ?? b['quantity'] ?? 0;
+            return DateTime.parse(b['expiryDate']).isAfter(now) && q > 0;
+          },
           orElse: () => batches.first,
         );
         
@@ -81,10 +94,13 @@ class _DispenseDialogState extends State<DispenseDialog> {
           _selectedBatch = optimalBatch;
           _loading = false;
         });
+        developer.log('Selected optimal batch (FEFO): ${optimalBatch['batchNumber']}', name: 'DispenseDialog');
       } else {
+        developer.log('No batches found for medicine ID: ${m.id}', name: 'DispenseDialog');
         setState(() => _loading = false);
       }
     } catch (e) {
+      developer.log('Error fetching batches: $e', name: 'DispenseDialog', error: e);
       setState(() => _loading = false);
     }
   }
@@ -92,29 +108,79 @@ class _DispenseDialogState extends State<DispenseDialog> {
   Future<void> _confirmDispense() async {
     if (_selectedMedicine == null || _selectedBatch == null) return;
     
+    final batchQty = _selectedBatch!['currentQuantity'] ?? _selectedBatch!['quantity'] ?? 0;
     final qty = int.tryParse(_qtyCtrl.text) ?? 0;
-    if (qty <= 0 || qty > (_selectedBatch!['quantity'] ?? 0)) {
+    if (qty <= 0 || qty > batchQty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid quantity')));
+      return;
+    }
+
+    if (_phoneCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter patient phone number')));
       return;
     }
 
     setState(() => _processing = true);
     try {
-      await _api.post(ApiConfig.transactions, {
+      final payload = {
         'medicineId': _selectedMedicine!.id,
-        'batchId': _selectedBatch!['id'],
+        'batchId': _selectedBatch!['_id'] ?? _selectedBatch!['id'],
         'quantity': qty,
-        'type': 'DISPENSE',
-        'remarks': 'Mobile Dispense Flow',
-      });
+        'patientPhone': _phoneCtrl.text,
+        'paymentMode': _paymentMode,
+        'amount': double.tryParse(_amountCtrl.text) ?? 0,
+        'reason': _reasonCtrl.text.isEmpty ? 'Prescription Refill' : _reasonCtrl.text,
+      };
+      developer.log('Initiating dispense with payload: $payload', name: 'DispenseDialog');
+
+      final response = await _api.post(ApiConfig.dispense, payload);
+      developer.log('Dispense API response: $response', name: 'DispenseDialog');
+
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dispense Successful!')));
+        if (_paymentMode == 'ORDER') {
+          setState(() {
+            _processing = false;
+            _shareLink = response['shareLink'];
+            _dispenseId = response['dispenseId'];
+          });
+        } else {
+          // For DIRECT, show "Waiting for Payment" overlay or similar
+          // For now, let's just show success and pop, or we can poll
+          developer.log('Payment mode DIRECT. Showing payment overlay. Dispense ID: ${response['dispenseId']}', name: 'DispenseDialog');
+          _showPaymentOverlay(response['dispenseId']);
+        }
       }
     } catch (e) {
+      developer.log('Error initiating dispense: $e', name: 'DispenseDialog', error: e);
       setState(() => _processing = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
+  }
+
+  void _showPaymentOverlay(String dispenseId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 20),
+            Text('Waiting for M-Pesa Payment...', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const Text('Please check your phone for the STK push.', textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('I have paid'),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      if (mounted) Navigator.pop(context);
+    });
   }
 
   @override
@@ -164,23 +230,52 @@ class _DispenseDialogState extends State<DispenseDialog> {
               ),
             ),
           ] else ...[
-            _selectedInfoPanel(),
-            const Spacer(),
-            _quantitySelector(),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: _processing ? null : _confirmDispense,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AfyaTheme.primary,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 0,
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _selectedInfoPanel(),
+                    const SizedBox(height: 24),
+                    if (_shareLink != null) ...[
+                      _escrowSuccessPanel(),
+                    ] else ...[
+                      _paymentModeToggle(),
+                      const SizedBox(height: 20),
+                      _paymentFields(),
+                      const SizedBox(height: 24),
+                      _quantitySelector(),
+                    ],
+                  ],
+                ),
               ),
-              child: _processing 
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Text('Confirm Dispense', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             ),
+            const SizedBox(height: 20),
+            if (_shareLink == null)
+              ElevatedButton(
+                onPressed: _processing ? null : _confirmDispense,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AfyaTheme.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: _processing 
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('Confirm & Pay', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              )
+            else
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AfyaTheme.success,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: const Text('Done', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              ),
             const SizedBox(height: 20),
           ],
         ],
@@ -252,7 +347,7 @@ class _DispenseDialogState extends State<DispenseDialog> {
                 children: [
                   const Icon(Icons.inventory_2, color: AfyaTheme.success, size: 16),
                   const SizedBox(width: 8),
-                  Text('Batch Stock: ${_selectedBatch!['quantity']} ${_selectedMedicine!.unit}', style: GoogleFonts.inter(fontSize: 13, color: AfyaTheme.success, fontWeight: FontWeight.w600)),
+                  Text('Batch Stock: ${_selectedBatch!['currentQuantity'] ?? _selectedBatch!['quantity'] ?? 0} ${_selectedMedicine!.unit}', style: GoogleFonts.inter(fontSize: 13, color: AfyaTheme.success, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -286,11 +381,135 @@ class _DispenseDialogState extends State<DispenseDialog> {
             ),
             _qtyBtn(Icons.add, () {
               final val = int.tryParse(_qtyCtrl.text) ?? 1;
-              if (val < (_selectedBatch!['quantity'] ?? 999)) _qtyCtrl.text = (val + 1).toString();
+              final batchQty = _selectedBatch!['currentQuantity'] ?? _selectedBatch!['quantity'] ?? 999;
+              if (val < batchQty) _qtyCtrl.text = (val + 1).toString();
             }),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _paymentModeToggle() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AfyaTheme.surfaceMuted,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _toggleBtn('DIRECT', 'Immediate', Icons.flash_on),
+          ),
+          Expanded(
+            child: _toggleBtn('ORDER', 'Escrow', Icons.security),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleBtn(String mode, String label, IconData icon) {
+    bool active = _paymentMode == mode;
+    return GestureDetector(
+      onTap: () => setState(() => _paymentMode = mode),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: active ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: active ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))] : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: active ? AfyaTheme.primary : AfyaTheme.textSecondary),
+            const SizedBox(width: 8),
+            Text(label, style: GoogleFonts.inter(fontSize: 14, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: active ? AfyaTheme.textPrimary : AfyaTheme.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _paymentFields() {
+    return Column(
+      children: [
+        _inputField(_phoneCtrl, 'Patient Phone', '2547XXXXXXXX', Icons.phone, TextInputType.phone),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: _inputField(_amountCtrl, 'Amount (KES)', '0.00', Icons.payments, TextInputType.number)),
+            const SizedBox(width: 16),
+            Expanded(child: _inputField(_reasonCtrl, 'Reason', 'Refill', Icons.note_add, TextInputType.text)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _inputField(TextEditingController ctrl, String label, String hint, IconData icon, TextInputType type) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AfyaTheme.textSecondary)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: ctrl,
+          keyboardType: type,
+          decoration: InputDecoration(
+            hintText: hint,
+            prefixIcon: Icon(icon, size: 20),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AfyaTheme.border)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AfyaTheme.border)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _escrowSuccessPanel() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AfyaTheme.successBg.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AfyaTheme.success.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.check_circle, color: AfyaTheme.success, size: 48),
+          const SizedBox(height: 16),
+          Text('Escrow Deal Created!', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w800, color: AfyaTheme.success)),
+          const SizedBox(height: 8),
+          Text('Funds will be held until delivery is confirmed.', textAlign: TextAlign.center, style: GoogleFonts.inter(color: AfyaTheme.textSecondary)),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 16),
+          Text('SHARE LINK', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AfyaTheme.textSecondary, letterSpacing: 1.2)),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AfyaTheme.border)),
+            child: Row(
+              children: [
+                Expanded(child: Text(_shareLink!, style: const TextStyle(fontSize: 12, color: AfyaTheme.primary), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                IconButton(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _shareLink!));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied to clipboard')));
+                  },
+                  icon: const Icon(Icons.copy, size: 18),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
