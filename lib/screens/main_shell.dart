@@ -45,7 +45,10 @@ class _MainShellState extends State<MainShell> {
               gradient: const LinearGradient(colors: [AfyaTheme.primary, AfyaTheme.primaryLight]),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.local_pharmacy, color: Colors.white, size: 18),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+            ),
           ),
         ),
         title: Text('Afya Shelf',

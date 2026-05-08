@@ -72,7 +72,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     BoxShadow(color: AfyaTheme.primary.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10)),
                   ],
                 ),
-                child: const Icon(Icons.local_pharmacy, size: 36, color: AfyaTheme.primary),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+                ),
               ),
               const SizedBox(height: 20),
               Text('Afya Shelf',

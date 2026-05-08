@@ -138,6 +138,13 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Center(
+            child: Opacity(
+              opacity: 0.5,
+              child: Image.asset('assets/images/logo.png', width: 40, height: 40),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
             child: Text('Afya Shelf · Open Source Management',
               style: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary),
             ),

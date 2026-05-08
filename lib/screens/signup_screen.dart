@@ -90,8 +90,23 @@ class _SignupScreenState extends State<SignupScreen> {
         ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
-          child: Column(
+            child: Column(
             children: [
+              Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: AfyaTheme.primary.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 5)),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(height: 16),
               Text('Create Account',
                 style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w800, color: AfyaTheme.textPrimary),
               ),
