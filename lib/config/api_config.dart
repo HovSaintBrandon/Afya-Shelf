@@ -28,6 +28,8 @@ class ApiConfig {
   // Transactions
   static const String transactions = '$baseUrl/transactions';
   static const String dispense = '$baseUrl/dispense';
+  static String dispenseStatus(String id) => '$baseUrl/dispense/$id';
+  static const String searchDispense = '$baseUrl/medicines/search-dispense';
 
   // Reports
   static const String reportExpiry = '$baseUrl/reports/expiry';

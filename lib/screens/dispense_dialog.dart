@@ -52,10 +52,10 @@ class _DispenseDialogState extends State<DispenseDialog> {
       return;
     }
     
-    // Simple search logic
+    // New specialized search for dispense
     try {
-      developer.log('Searching medicines with query: ${_searchCtrl.text}', name: 'DispenseDialog');
-      final data = await _api.get('${ApiConfig.medicines}?search=${_searchCtrl.text}');
+      developer.log('Searching medicines for dispense with query: ${_searchCtrl.text}', name: 'DispenseDialog');
+      final data = await _api.get('${ApiConfig.searchDispense}?keyword=${_searchCtrl.text}');
       final list = data is List ? data : (data['data'] ?? []);
       if (mounted) {
         setState(() {
@@ -68,40 +68,18 @@ class _DispenseDialogState extends State<DispenseDialog> {
   Future<void> _selectMedicine(Medicine m) async {
     setState(() {
       _selectedMedicine = m;
-      _loading = true;
       _results = [];
+      _loading = false;
     });
 
-    try {
-      developer.log('Fetching batches for medicine ID: ${m.id}', name: 'DispenseDialog');
-      final batchesData = await _api.get('${ApiConfig.batches}?medicineId=${m.id}');
-      final batches = batchesData['batches'] as List;
-      
-      if (batches.isNotEmpty) {
-        // FEFO Logic: Sort by expiryDate and pick the first non-empty, non-expired batch
-        final now = DateTime.now();
-        batches.sort((a, b) => (a['expiryDate'] as String).compareTo(b['expiryDate'] as String));
-        
-        final optimalBatch = batches.firstWhere(
-          (b) {
-            final q = b['currentQuantity'] ?? b['quantity'] ?? 0;
-            return DateTime.parse(b['expiryDate']).isAfter(now) && q > 0;
-          },
-          orElse: () => batches.first,
-        );
-        
-        setState(() {
-          _selectedBatch = optimalBatch;
-          _loading = false;
-        });
-        developer.log('Selected optimal batch (FEFO): ${optimalBatch['batchNumber']}', name: 'DispenseDialog');
-      } else {
-        developer.log('No batches found for medicine ID: ${m.id}', name: 'DispenseDialog');
-        setState(() => _loading = false);
-      }
-    } catch (e) {
-      developer.log('Error fetching batches: $e', name: 'DispenseDialog', error: e);
-      setState(() => _loading = false);
+    if (m.availableBatches != null && m.availableBatches!.isNotEmpty) {
+      // The backend already sorted them by expiry date (FEFO)
+      setState(() {
+        _selectedBatch = m.availableBatches!.first;
+      });
+      developer.log('Selected soonest expiring batch: ${_selectedBatch!['batchNumber']}', name: 'DispenseDialog');
+    } else {
+      developer.log('No batches found in medicine object for ID: ${m.id}', name: 'DispenseDialog');
     }
   }
 
@@ -144,10 +122,10 @@ class _DispenseDialogState extends State<DispenseDialog> {
             _dispenseId = response['dispenseId'];
           });
         } else {
-          // For DIRECT, show "Waiting for Payment" overlay or similar
-          // For now, let's just show success and pop, or we can poll
+          // For DIRECT, show "Waiting for Payment" overlay and poll
           developer.log('Payment mode DIRECT. Showing payment overlay. Dispense ID: ${response['dispenseId']}', name: 'DispenseDialog');
-          _showPaymentOverlay(response['dispenseId']);
+          setState(() => _processing = false);
+          _startPaymentPolling(response['dispenseId']);
         }
       }
     } catch (e) {
@@ -157,30 +135,113 @@ class _DispenseDialogState extends State<DispenseDialog> {
     }
   }
 
-  void _showPaymentOverlay(String dispenseId) {
+  void _startPaymentPolling(String dispenseId) {
+    bool isCompleted = false;
+    
     showDialog(
       context: context,
       barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Inner polling logic
+          Future.doWhile(() async {
+            if (isCompleted || !mounted) return false;
+            
+            try {
+              final status = await _api.get(ApiConfig.dispenseStatus(dispenseId));
+              if (status['paymentStatus'] == 'COMPLETED') {
+                isCompleted = true;
+                if (mounted) {
+                  Navigator.pop(context); // Close the "Waiting" dialog
+                  _showSuccessScreen();
+                }
+                return false;
+              }
+            } catch (e) {
+              developer.log('Polling error: $e', name: 'DispenseDialog');
+            }
+            
+            await Future.delayed(const Duration(seconds: 3));
+            return true;
+          });
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            content: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 6,
+                      valueColor: AlwaysStoppedAnimation<Color>(AfyaTheme.primary),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Confirming Payment...',
+                    style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w800, color: AfyaTheme.textPrimary),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Please check your phone for the M-Pesa prompt. Enter your PIN to complete the transaction.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 14, color: AfyaTheme.textSecondary, height: 1.5),
+                  ),
+                  const SizedBox(height: 32),
+                  const LinearProgressIndicator(backgroundColor: AfyaTheme.surfaceMuted, valueColor: AlwaysStoppedAnimation<Color>(AfyaTheme.primary)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  isCompleted = true;
+                  Navigator.pop(context);
+                },
+                child: Text('Cancel', style: GoogleFonts.inter(color: AfyaTheme.destructive, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSuccessScreen() {
+    showDialog(
+      context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 20),
-            Text('Waiting for M-Pesa Payment...', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            const Text('Please check your phone for the STK push.', textAlign: TextAlign.center),
-            const SizedBox(height: 20),
+            const Icon(Icons.check_circle, color: AfyaTheme.success, size: 80),
+            const SizedBox(height: 24),
+            Text('Payment Successful!', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            Text('The medication has been dispensed and stock records updated.', textAlign: TextAlign.center, style: GoogleFonts.inter(color: AfyaTheme.textSecondary)),
+            const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('I have paid'),
+              onPressed: () {
+                Navigator.pop(context); // Close success dialog
+                Navigator.pop(this.context); // Close dispense dialog
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AfyaTheme.primary,
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: const Text('Great!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
             ),
           ],
         ),
       ),
-    ).then((_) {
-      if (mounted) Navigator.pop(context);
-    });
+    );
   }
 
   @override

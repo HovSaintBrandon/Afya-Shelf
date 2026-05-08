@@ -6,6 +6,7 @@ class Medicine {
   final String unit;
   final int lowStockThreshold;
   final int totalStock;
+  final List<dynamic>? availableBatches;
 
   Medicine({
     required this.id,
@@ -15,6 +16,7 @@ class Medicine {
     required this.unit,
     required this.lowStockThreshold,
     this.totalStock = 0,
+    this.availableBatches,
   });
 
   factory Medicine.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class Medicine {
       unit: json['unit'] ?? '',
       lowStockThreshold: json['lowStockThreshold'] ?? 0,
       totalStock: json['totalStock'] ?? 0,
+      availableBatches: json['availableBatches'],
     );
   }
 
