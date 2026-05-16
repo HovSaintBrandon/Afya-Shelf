@@ -218,7 +218,6 @@ class _DispenseDialogState extends State<DispenseDialog> {
       if (mounted) Navigator.pop(this.context); // Close dispense dialog
     });
   }
-}
 
   @override
   Widget build(BuildContext context) {
