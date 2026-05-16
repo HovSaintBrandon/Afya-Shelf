@@ -29,6 +29,7 @@ class ApiConfig {
   static const String transactions = '$baseUrl/transactions';
   static const String dispense = '$baseUrl/dispense';
   static String dispenseStatus(String id) => '$baseUrl/dispense/$id';
+  static String receipt(String dispenseId) => '$baseUrl/payments/receipt/$dispenseId';
   static const String searchDispense = '$baseUrl/medicines/search-dispense';
 
   // Reports
