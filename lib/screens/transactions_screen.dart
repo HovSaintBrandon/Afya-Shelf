@@ -4,6 +4,7 @@ import '../config/theme.dart';
 import '../models/transaction.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
+import '../widgets/receipt_dialog.dart';
 import 'dart:developer' as developer;
 
 class TransactionsScreen extends StatefulWidget {
@@ -240,6 +241,23 @@ class _TransactionCard extends StatelessWidget {
               decoration: BoxDecoration(color: AfyaTheme.surfaceMuted, borderRadius: BorderRadius.circular(8)),
               child: Text(transaction.reason,
                 style: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary, fontStyle: FontStyle.italic),
+              ),
+            ),
+          ],
+          if (transaction.type == 'DISPENSE' && transaction.paymentStatus == 'COMPLETED') ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => ReceiptDialog.show(context, transaction.id),
+                icon: const Icon(Icons.receipt_long, size: 18),
+                label: const Text('View Receipt'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AfyaTheme.primary,
+                  side: const BorderSide(color: AfyaTheme.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
               ),
             ),
           ],
