@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../config/api_config.dart';
 import '../providers/auth_provider.dart';
 import 'staff_screen.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -147,6 +148,22 @@ class SettingsScreen extends StatelessWidget {
           Center(
             child: Text('Afya Shelf · Open Source Management',
               style: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  final info = snapshot.data!;
+                  return Text(
+                    'Version ${info.version}+${info.buildNumber}',
+                    style: GoogleFonts.inter(fontSize: 12, color: AfyaTheme.textSecondary, fontWeight: FontWeight.w500),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
             ),
           ),
         ],
