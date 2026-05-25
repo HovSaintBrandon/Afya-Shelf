@@ -161,4 +161,51 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  Future<bool> forgotPassword(String username) async {
+    print('🔑 [AUTH] Forgot password attempt for: $username');
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _api.post(ApiConfig.authForgotPassword, {
+        'username': username,
+      });
+      print('✅ [AUTH] Forgot password email sent');
+      _loading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      print('❌ [AUTH] Forgot password failed: $e');
+      _error = e is ApiException ? e.message : 'Failed to request password reset';
+      _loading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updatePassword(String currentPassword, String newPassword) async {
+    print('🔑 [AUTH] Update password attempt');
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _api.post(ApiConfig.authUpdatePassword, {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      });
+      print('✅ [AUTH] Password updated successfully');
+      _loading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      print('❌ [AUTH] Update password failed: $e');
+      _error = e is ApiException ? e.message : 'Failed to update password';
+      _loading = false;
+      notifyListeners();
+      return false;
+    }
+  }
 }

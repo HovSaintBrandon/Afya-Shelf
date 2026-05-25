@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../config/api_config.dart';
 import '../providers/auth_provider.dart';
 import 'staff_screen.dart';
+import 'update_password_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -45,6 +46,23 @@ class SettingsScreen extends StatelessWidget {
                 _InfoRow(label: 'Role', value: auth.user?.role ?? ''),
                 const Divider(height: 32),
                 _InfoRow(label: 'Clinic ID', value: auth.user?.clinicId ?? ''),
+                const Divider(height: 32),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const UpdatePasswordScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.lock_outline, size: 18),
+                  label: const Text('Change Password'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AfyaTheme.primary,
+                    side: const BorderSide(color: AfyaTheme.primary),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    minimumSize: const Size(double.infinity, 48),
+                  ),
+                ),
               ],
             ),
           ),

@@ -10,6 +10,8 @@ class ApiConfig {
   static const String authSwitchClinic = '$baseUrl/auth/switch-clinic';
   static const String authWorkers = '$baseUrl/auth/workers';
   static const String authUsers = '$baseUrl/auth/users';
+  static const String authForgotPassword = '$baseUrl/auth/forgot-password';
+  static const String authUpdatePassword = '$baseUrl/auth/update-password';
 
   // Clinics
   static const String clinics = '$baseUrl/clinics';
