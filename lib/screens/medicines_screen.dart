@@ -79,7 +79,47 @@ class _MedicinesScreenState extends State<MedicinesScreen> {
       ]),
     );
     if (image != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Processing image: ${image.name}...')));
+      final fileBytes = await image.readAsBytes();
+      final fileName = image.name;
+
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => Center(
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text('Processing image...', style: GoogleFonts.inter()),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      try {
+        final ocrResult = await _sync.ocrExtraction(fileBytes, fileName);
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => OcrResultsScreen(response: ocrResult)),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AfyaTheme.destructive),
+          );
+        }
+      }
     }
   }
 
@@ -144,6 +184,7 @@ class _MedicinesScreenState extends State<MedicinesScreen> {
             context: context,
             builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
               ListTile(leading: const Icon(Icons.edit_note), title: const Text('Manual Entry'), onTap: () { Navigator.pop(ctx); _showAddDialog(context); }),
+              ListTile(leading: const Icon(Icons.camera_alt), title: const Text('Take Photo / Image'), onTap: () { Navigator.pop(ctx); _pickImage(); }),
               ListTile(leading: const Icon(Icons.upload_file), title: const Text('Upload File (.xlsx, .docx, .pdf)'), onTap: () { Navigator.pop(ctx); _pickFile(); }),
             ]),
           );

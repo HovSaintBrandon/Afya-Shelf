@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../models/ocr_response.dart';
@@ -31,6 +32,38 @@ class _OcrResultsScreenState extends State<OcrResultsScreen> {
     _sections.addAll(sections);
     
     for (var section in sections) {
+      final text = section.lines.join('\n');
+      
+      // Try to parse as JSON first (from Image OCR)
+      try {
+        final Map<String, dynamic> parsedJson = jsonDecode(text);
+        final Map<String, dynamic> item = {};
+        
+        if (parsedJson['medicineName'] != null && parsedJson['medicineName'] != '') {
+          item['name'] = parsedJson['medicineName'];
+        } else if (parsedJson['genericName'] != null && parsedJson['genericName'] != '') {
+          item['name'] = parsedJson['genericName'];
+        }
+
+        if (parsedJson['dosageForm'] != null) {
+          item['category'] = parsedJson['dosageForm'];
+        }
+        
+        if (parsedJson['expiryDate'] != null) {
+          item['expiryDate'] = parsedJson['expiryDate'];
+        }
+        
+        item['quantity'] = 1; // Default for single image scan
+        item['unitPrice'] = 0.0;
+        
+        if (item.containsKey('name') && item['name'] != '') {
+          _extractedData.add(item);
+        }
+        continue; // Skip CSV parsing for this section
+      } catch (e) {
+        // Not JSON, continue to CSV parsing
+      }
+
       final isCsv = section.lines.isNotEmpty && section.lines.first.contains(',');
       if (isCsv) {
         final List<List<String>> data = section.lines.map((l) => _parseCsvLine(l)).toList();
